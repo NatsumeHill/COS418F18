@@ -22,11 +22,13 @@ func topWords(path string, numWords int, charThreshold int) []WordCount {
 	checkError(err)
 	inputText := string(f)
 	inputText = strings.ToLower(inputText)
-	reg := regexp.MustCompile("[^0-9a-zA-Z][\t\n\v\f\r ]")
-	inputText = reg.ReplaceAllString(inputText, " ")
-	fmt.Println(inputText)
+	// reg := regexp.MustCompile("[^0-9a-zA-Z][\t\n\v\f\r ]")
+	// inputText = reg.ReplaceAllString(inputText, " ")
+	// fmt.Println(inputText)
 	wordMap := make(map[string]*WordCount)
+	reg := regexp.MustCompile("[^0-9a-zA-Z]+")
 	for _, word := range strings.Fields(inputText) {
+		word = reg.ReplaceAllString(word, "")
 		if len([]rune(word)) < charThreshold {
 			continue
 		}
