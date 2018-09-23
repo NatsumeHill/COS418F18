@@ -22,16 +22,32 @@ func topWords(path string, numWords int, charThreshold int) []WordCount {
 	checkError(err)
 	inputText := string(f)
 	inputText = strings.ToLower(inputText)
-	words :=strings.Fields(inputText)
-	reg := regexp.MustCompile("[^0-9a-zA-Z]+")
-	for _, word := range words{
-		word = reg.ReplaceAllString(word,"")
+	reg := regexp.MustCompile("[^0-9a-zA-Z][\t\n\v\f\r ]")
+	inputText = reg.ReplaceAllString(inputText, " ")
+	fmt.Println(inputText)
+	wordMap := make(map[string]*WordCount)
+	for _, word := range strings.Fields(inputText) {
+		if len([]rune(word)) < charThreshold {
+			continue
+		}
+		wordCount, ok := wordMap[word]
+		if !ok {
+			wordCount = &WordCount{word, 0}
+			wordMap[word] = wordCount
+		}
+		wordCount.Count++
+		// fmt.Println(word)
 	}
-	fmt.Printf("%v", words)
+	wordCountList := make([]WordCount, 0, 0)
+	for key := range wordMap {
+		wordCountList = append(wordCountList, *wordMap[key])
+	}
+	sortWordCounts(wordCountList)
+	fmt.Printf("%v", wordCountList)
 	// TODO: implement me
 	// HINT: You may find the `strings.Fields` and `strings.ToLower` functions helpful
 	// HINT: To keep only alphanumeric characters, use the regex "[^0-9a-zA-Z]+"
-	return nil
+	return wordCountList[:numWords]
 }
 
 // A struct that represents how many times a word is observed in a document
