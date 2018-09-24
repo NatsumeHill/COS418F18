@@ -45,7 +45,6 @@ func topWords(path string, numWords int, charThreshold int) []WordCount {
 		wordCountList = append(wordCountList, *wordMap[key])
 	}
 	sortWordCounts(wordCountList)
-	fmt.Printf("%v", wordCountList)
 	// TODO: implement me
 	// HINT: You may find the `strings.Fields` and `strings.ToLower` functions helpful
 	// HINT: To keep only alphanumeric characters, use the regex "[^0-9a-zA-Z]+"

@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
+	"sync"
 )
 
 // Sum numbers from channel `nums` and output sum to `out`.
@@ -18,8 +20,6 @@ func sumWorker(nums chan int, out chan int) {
 		total += num
 	}
 	out <- total
-	println(">>>>>>>>>>>>>>>sum worker")
-	println(total)
 }
 
 // Read integers from the file `fileName` and return sum of all values.
@@ -46,54 +46,60 @@ func sum(num int, fileName string) int {
 	f, err := os.Open(fileName)
 	checkError(err)
 	defer f.Close()
-	// finfo, err := f.Stat()
-	// checkError(err)
-	// fileSize := int(finfo.Size())
-	// // Number of go routines we need to spawn.
-	// concurrency := fileSize / BufferSize
-	// // buffer sizes that each of the go routine below should use. ReadAt
-	// // returns an error if the buffer size is larger than the bytes returned
-	// // from the file.
-	// chunksizes := make([]chunk, concurrency)
-	// // All buffer sizes are the same in the normal case. Offsets depend on the
-	// // index. Second go routine should start at 100, for example, given our
-	// // buffer size of 100.
-	// for i := 0; i < concurrency; i++ {
-	// 	chunksizes[i].bufsize = BufferSize
-	// 	chunksizes[i].offset = int64(BufferSize * i)
-	// }
-	// // check for any left over bytes. Add the residual number of bytes as the
-	// // the last chunk size.
-	// if remainder := fileSize % BufferSize; remainder != 0 {
-	// 	c := chunk{bufsize: remainder, offset: int64(concurrency * BufferSize)}
-	// 	concurrency++
-	// 	chunksizes = append(chunksizes, c)
-	// }
-	// var wg sync.WaitGroup
-	// wg.Add(concurrency)
-	// stringFromFile := ""
-	// for i := 0; i < concurrency; i++ {
-	// 	go func(chunksizes []chunk, i int) {
-	// 		defer wg.Done()
-	// 		chunk := chunksizes[i]
-	// 		buffer := make([]byte, chunk.bufsize)
-	// 		bytesread, err := f.ReadAt(buffer, chunk.offset)
-	// 		checkError(err)
-	// 		// rd := bufio.NewReader(strings.NewReader(string(buffer[:bytesread])))
-	// 		// checkNum, err := readInts(rd)
-	// 		// if err != nil && err != io.EOF {
-	// 		// 	fmt.Println(err)
-	// 		// 	return
-	// 		// }
-	// 		// for _, tosend := range checkNum {
-	// 		// 	send <- tosend
-	// 		// }
-	// 		// fmt.Printf("%v\n", checkNum)
-	// 		stringFromFile += string(buffer[:bytesread])
-	// 	}(chunksizes, i)
-	// }
-	// wg.Wait()
-	rd := bufio.NewReader(f)
+	finfo, err := f.Stat()
+	checkError(err)
+	fileSize := int(finfo.Size())
+	// Number of go routines we need to spawn.
+	concurrency := fileSize / BufferSize
+	// buffer sizes that each of the go routine below should use. ReadAt
+	// returns an error if the buffer size is larger than the bytes returned
+	// from the file.
+	chunksizes := make([]chunk, concurrency)
+	// All buffer sizes are the same in the normal case. Offsets depend on the
+	// index. Second go routine should start at 100, for example, given our
+	// buffer size of 100.
+	for i := 0; i < concurrency; i++ {
+		chunksizes[i].bufsize = BufferSize
+		chunksizes[i].offset = int64(BufferSize * i)
+	}
+	// check for any left over bytes. Add the residual number of bytes as the
+	// the last chunk size.
+	if remainder := fileSize % BufferSize; remainder != 0 {
+		c := chunk{bufsize: remainder, offset: int64(concurrency * BufferSize)}
+		concurrency++
+		chunksizes = append(chunksizes, c)
+	}
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+	stringFromFile := ""
+	content := make([]string, concurrency, concurrency)
+	for i := 0; i < concurrency; i++ {
+		go func(chunksizes []chunk, i int) {
+			defer wg.Done()
+			chunk := chunksizes[i]
+			buffer := make([]byte, chunk.bufsize)
+			bytesread, err := f.ReadAt(buffer, chunk.offset)
+			checkError(err)
+			// rd := bufio.NewReader(strings.NewReader(string(buffer[:bytesread])))
+			// checkNum, err := readInts(rd)
+			// if err != nil && err != io.EOF {
+			// 	fmt.Println(err)
+			// 	return
+			// }
+			// for _, tosend := range checkNum {
+			// 	send <- tosend
+			// }
+			// fmt.Printf("%v\n", checkNum)
+			// stringFromFile += string(buffer[:bytesread])
+			content[i] = string(buffer[:bytesread])
+		}(chunksizes, i)
+	}
+	wg.Wait()
+	for i := 0; i < concurrency; i++ {
+		stringFromFile += content[i]
+	}
+	rd := bufio.NewReader(strings.NewReader(stringFromFile))
+	// rd := bufio.NewReader(f)
 	checkNum, err := readInts(rd)
 	// fmt.Printf("%v\n", checkNum)
 	checkError(err)
