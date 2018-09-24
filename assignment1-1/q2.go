@@ -2,6 +2,8 @@ package cos418_hw1_1
 
 import (
 	"bufio"
+	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -27,85 +29,57 @@ func sumWorker(nums chan int, out chan int) {
 // `sumWorker` to find the sum of the values concurrently.
 // You should use `checkError` to handle potential errors.
 // Do NOT modify function signature.
-type chunk struct {
-	bufsize int
-	offset  int64
-}
-
 func sum(num int, fileName string) int {
 	// TODO: implement me
 	// HINT: use `readInts` and `sumWorkers`
 	// HINT: used buffered channels for splitting numbers between workers
 	send := make(chan int, num)
-	recv := make(chan int)
+	recv := make(chan int, num)
 	for i := 0; i < num; i++ {
 		go sumWorker(send, recv)
 	}
-	// 并发读取文件
+	// 分块读取文件
 	const BufferSize = 100
-	f, err := os.Open(fileName)
+	file, err := os.Open(fileName)
 	checkError(err)
-	defer f.Close()
-	finfo, err := f.Stat()
-	checkError(err)
-	fileSize := int(finfo.Size())
-	// Number of go routines we need to spawn.
-	concurrency := fileSize / BufferSize
-	// buffer sizes that each of the go routine below should use. ReadAt
-	// returns an error if the buffer size is larger than the bytes returned
-	// from the file.
-	chunksizes := make([]chunk, concurrency)
-	// All buffer sizes are the same in the normal case. Offsets depend on the
-	// index. Second go routine should start at 100, for example, given our
-	// buffer size of 100.
-	for i := 0; i < concurrency; i++ {
-		chunksizes[i].bufsize = BufferSize
-		chunksizes[i].offset = int64(BufferSize * i)
-	}
-	// check for any left over bytes. Add the residual number of bytes as the
-	// the last chunk size.
-	if remainder := fileSize % BufferSize; remainder != 0 {
-		c := chunk{bufsize: remainder, offset: int64(concurrency * BufferSize)}
-		concurrency++
-		chunksizes = append(chunksizes, c)
-	}
+	defer file.Close()
+	lastNum := ""
+	currNums := ""
+	buffer := make([]byte, BufferSize)
+	// 创建"readInts"协同进程
 	var wg sync.WaitGroup
-	wg.Add(concurrency)
-	stringFromFile := ""
-	content := make([]string, concurrency, concurrency)
-	for i := 0; i < concurrency; i++ {
-		go func(chunksizes []chunk, i int) {
-			defer wg.Done()
-			chunk := chunksizes[i]
-			buffer := make([]byte, chunk.bufsize)
-			bytesread, err := f.ReadAt(buffer, chunk.offset)
-			checkError(err)
-			// rd := bufio.NewReader(strings.NewReader(string(buffer[:bytesread])))
-			// checkNum, err := readInts(rd)
-			// if err != nil && err != io.EOF {
-			// 	fmt.Println(err)
-			// 	return
-			// }
-			// for _, tosend := range checkNum {
-			// 	send <- tosend
-			// }
-			// fmt.Printf("%v\n", checkNum)
-			// stringFromFile += string(buffer[:bytesread])
-			content[i] = string(buffer[:bytesread])
-		}(chunksizes, i)
+	for {
+		bytesread, err := file.Read(buffer)
+		// err value can be io.EOF, which means that we reached the end of
+		// file, and we have to terminate the loop. Note the fmt.Println lines
+		// will get executed for the last chunk because the io.EOF gets
+		// returned from the Read function only on the *next* iteration, and
+		// the bytes returned will be 0 on that read.
+		if err != nil {
+			if err != io.EOF {
+				fmt.Println(err)
+			}
+			break
+		}
+		if i := bytes.LastIndexByte(buffer, '\n'); i < bytesread-1 {
+			currNums = lastNum + string(buffer[:i])
+			lastNum = string(buffer[i:bytesread])
+		} else {
+			currNums = lastNum + string(buffer[:bytesread])
+			lastNum = ""
+		}
+		wg.Add(1)
+		go func(source string) {
+			rd := strings.NewReader(source)
+			nums, _ := readInts(rd)
+			for _, tosend := range nums {
+				send <- tosend
+			}
+			wg.Done()
+		}(currNums)
 	}
+	// 等所有"readInts"进程退出之后，关闭channel，防止阻塞
 	wg.Wait()
-	for i := 0; i < concurrency; i++ {
-		stringFromFile += content[i]
-	}
-	rd := bufio.NewReader(strings.NewReader(stringFromFile))
-	// rd := bufio.NewReader(f)
-	checkNum, err := readInts(rd)
-	// fmt.Printf("%v\n", checkNum)
-	checkError(err)
-	for _, tosend := range checkNum {
-		send <- tosend
-	}
 	close(send)
 	total := 0
 	for i := 0; i < num; i++ {
